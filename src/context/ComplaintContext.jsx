@@ -198,6 +198,12 @@ export function ComplaintProvider({ children }) {
     return updated;
   };
 
+  // Delete complaint
+  const deleteComplaint = async (complaintId) => {
+    await DataRepo.deleteComplaint(complaintId);
+    setComplaints(prev => prev.filter(c => c.id !== complaintId));
+  };
+
   // Mark notification read
   const markNotificationRead = async (notifId) => {
     await DataRepo.markNotificationRead(notifId);
@@ -226,6 +232,7 @@ export function ComplaintProvider({ children }) {
         completeComplaint,
         reopenComplaint,
         overridePriority,
+        deleteComplaint,
         markNotificationRead,
         refreshComplaints: loadData
       }}

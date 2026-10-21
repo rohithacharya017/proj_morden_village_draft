@@ -310,6 +310,27 @@ export const DataRepo = {
     return updated;
   },
 
+  // Delete complaint
+  async deleteComplaint(id) {
+    if (isSupabaseConfigured) {
+      try {
+        const { error } = await supabase.from('complaints').delete().eq('id', id);
+        if (error) {
+          console.warn('Supabase delete failed:', error);
+        }
+      } catch (err) {
+        console.warn('Supabase delete failed, using local store:', err);
+      }
+    }
+
+    // Local fallback
+    const all = JSON.parse(localStorage.getItem('mv_complaints') || '[]');
+    const filtered = all.filter(c => c.id !== id);
+    localStorage.setItem('mv_complaints', JSON.stringify(filtered));
+
+    return true;
+  },
+
   // Add audit record
   addAuditHistory(entry) {
     const history = JSON.parse(localStorage.getItem('mv_history') || '[]');

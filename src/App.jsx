@@ -30,8 +30,24 @@ function AppContent() {
     ? complaints.find((c) => c.id === selectedComplaintId)
     : null;
 
-  // Navigation router
+  // Navigation router with strict role authorization
   const navigate = (page) => {
+    // Restrict Panchayat Dashboard & Reports to authorized Panchayat Officials only
+    if (page === 'panchayat_dashboard' || page === 'panchayat_reports') {
+      if (!isPanchayat) {
+        if (isVillager) {
+          alert('Access Denied: Villagers cannot access the Gram Panchayat administrative desk. You are being redirected to your Citizen Dashboard.');
+          setCurrentPage('villager_dashboard');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        } else {
+          setCurrentPage('panchayat_login');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+      }
+    }
+
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -81,15 +97,65 @@ function AppContent() {
           <PanchayatLoginPage onNavigate={navigate} />
         )}
 
+        {/* Protected Panchayat Dashboard */}
         {currentPage === 'panchayat_dashboard' && (
-          <PanchayatDashboard
-            onNavigate={navigate}
-            onSelectComplaint={handleSelectComplaint}
-          />
+          isPanchayat ? (
+            <PanchayatDashboard
+              onNavigate={navigate}
+              onSelectComplaint={handleSelectComplaint}
+            />
+          ) : (
+            <div className="max-w-xl mx-auto my-16 px-4 animate-fade-in text-center">
+              <div className="bg-white rounded-3xl p-8 border border-rose-200 shadow-xl space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+                  <span className="text-2xl">🔒</span>
+                </div>
+                <h3 className="text-xl font-extrabold text-slate-900">
+                  Access Restricted to Panchayat Officials
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                  Villagers are strictly prohibited from viewing or accessing the Gram Panchayat grievance desk and other residents' complaints. Villagers may only view complaints they have personally submitted.
+                </p>
+                <div className="pt-2">
+                  <button
+                    onClick={() => navigate(isVillager ? 'villager_dashboard' : 'panchayat_login')}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition"
+                  >
+                    {isVillager ? 'Go to My Citizen Dashboard' : 'Panchayat Official Sign In'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
         )}
 
+        {/* Protected Panchayat Reports */}
         {currentPage === 'panchayat_reports' && (
-          <PanchayatReports onNavigate={navigate} />
+          isPanchayat ? (
+            <PanchayatReports onNavigate={navigate} />
+          ) : (
+            <div className="max-w-xl mx-auto my-16 px-4 animate-fade-in text-center">
+              <div className="bg-white rounded-3xl p-8 border border-rose-200 shadow-xl space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+                  <span className="text-2xl">🔒</span>
+                </div>
+                <h3 className="text-xl font-extrabold text-slate-900">
+                  Access Restricted
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                  Only verified Gram Panchayat officials can view analytics and village-wide reports.
+                </p>
+                <div className="pt-2">
+                  <button
+                    onClick={() => navigate(isVillager ? 'villager_dashboard' : 'panchayat_login')}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition"
+                  >
+                    {isVillager ? 'Go to My Citizen Dashboard' : 'Panchayat Official Sign In'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
         )}
       </main>
 

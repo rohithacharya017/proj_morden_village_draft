@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { useComplaints } from '../context/ComplaintContext';
 import { COMPLAINT_CATEGORIES } from '../types';
 import {
@@ -11,12 +12,50 @@ import {
   Filter,
   Download,
   Printer,
-  Sparkles
+  Sparkles,
+  AlertOctagon
 } from 'lucide-react';
 
 export default function PanchayatReports({ onNavigate }) {
+  const { currentUser, isPanchayat } = useAuth();
   const { complaints } = useComplaints();
   const [selectedMonth, setSelectedMonth] = useState('ALL');
+
+  // ACCESS CONTROL: Villagers cannot view official panchayat analytics
+  if (!isPanchayat || currentUser?.role !== 'panchayat_official') {
+    return (
+      <div className="max-w-xl mx-auto my-16 px-4 animate-fade-in text-center">
+        <div className="bg-white rounded-3xl p-8 sm:p-10 border border-rose-200 shadow-xl space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-inner">
+            <AlertOctagon className="w-8 h-8" />
+          </div>
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-rose-700 bg-rose-50 border border-rose-200 px-3 py-1 rounded-full">
+            RESTRICTED ACCESS
+          </span>
+          <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-1">
+            Access Restricted
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-md mx-auto">
+            Gram Panchayat analytics and administrative reports are restricted to official accounts.
+          </p>
+          <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              onClick={() => onNavigate('villager_dashboard')}
+              className="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition"
+            >
+              Go to My Citizen Dashboard
+            </button>
+            <button
+              onClick={() => onNavigate('panchayat_login')}
+              className="w-full sm:w-auto px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition"
+            >
+              Panchayat Sign In
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Total Complaints
   const total = complaints.length;

@@ -39,6 +39,39 @@ export default function ComplaintDetailModal({ complaint, onClose, onSelectCompl
 
   if (!complaint) return null;
 
+  // Authorization Check: If user is a logged-in villager, they can ONLY view their own reported problems
+  const isOwner =
+    !currentUser ||
+    currentUser.role !== 'villager' ||
+    complaint.reporter_id === currentUser.id ||
+    (currentUser.mobile_number && complaint.reporter_mobile_snapshot === currentUser.mobile_number);
+
+  if (currentUser?.role === 'villager' && !isOwner) {
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-rose-200 text-center animate-fade-in space-y-4">
+          <div className="w-14 h-14 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+            <AlertTriangle className="w-7 h-7" />
+          </div>
+          <h3 className="font-extrabold text-lg sm:text-xl text-slate-900">
+            Access Restricted
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+            As a registered citizen, you can only view details of problems reported by your account. You cannot view other villagers' private grievance reports.
+          </p>
+          <div className="pt-2">
+            <button
+              onClick={onClose}
+              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition shadow-sm"
+            >
+              Back to My Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Handle Acknowledge
   const handleAcknowledge = async () => {
     setIsSubmitting(true);

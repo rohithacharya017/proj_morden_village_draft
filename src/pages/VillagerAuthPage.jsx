@@ -1,198 +1,186 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Shield, Eye, EyeOff, CheckCircle2, AlertCircle, ArrowRight, UserCheck } from 'lucide-react';
+import {
+  Smartphone,
+  ShieldCheck,
+  CheckCircle2,
+  AlertCircle,
+  ArrowRight,
+  ArrowLeft,
+  RefreshCw,
+  KeyRound,
+  User
+} from 'lucide-react';
 
 export default function VillagerAuthPage({ onNavigate }) {
-  const { registerVillager, loginVillager, loginAsDemoVillager } = useAuth();
-  const [isLogin, setIsLogin] = useState(false);
+  const { sendVillagerOtp, verifyVillagerOtp } = useAuth();
 
-  // Form Fields
+  // Step 1 = Enter Name & Mobile, Step 2 = Enter OTP
+  const [step, setStep] = useState(1);
+
+  // Form Fields: First Name, then Mobile Number
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [otp, setOtp] = useState('');
 
-  // Errors & UI state
-  const [errors, setErrors] = useState({});
-  const [authError, setAuthError] = useState('');
+  // Timer state for OTP resend
+  const [timer, setTimer] = useState(30);
+  const [canResend, setCanResend] = useState(false);
+
+  // UI States
+  const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Validation function
-  const validateForm = () => {
-    const errs = {};
+  // Timer countdown effect for OTP resend
+  useEffect(() => {
+    let interval = null;
+    if (step === 2 && timer > 0) {
+      interval = setInterval(() => {
+        setTimer((prev) => prev - 1);
+      }, 1000);
+    } else if (timer === 0) {
+      setCanResend(true);
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [step, timer]);
 
-    if (!isLogin && !fullName.trim()) {
-      errs.fullName = 'Full name is required';
+  // Step 1: Send OTP (validates name first, then mobile number)
+  const handleSendOtp = async (e) => {
+    if (e) e.preventDefault();
+    setError('');
+
+    // 1. Validate User Name first
+    if (!fullName.trim()) {
+      setError('Please enter your full name first.');
+      return;
     }
 
-    // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email.trim()) {
-      errs.email = 'Email address is required';
-    } else if (!emailRegex.test(email.trim())) {
-      errs.email = 'Please enter a valid email address';
+    // 2. Validate Mobile Number second
+    const cleanMobile = mobileNumber.replace(/\D/g, '');
+    if (cleanMobile.length !== 10 || !/^[6-9]\d{9}$/.test(cleanMobile)) {
+      setError('Please enter a valid 10-digit Indian mobile number (starting with 6, 7, 8, or 9).');
+      return;
     }
-
-    // Indian mobile number validation (10 digits starting with 6-9)
-    if (!isLogin) {
-      const cleanedMobile = mobileNumber.replace(/[\s\-\+]/g, '');
-      const mobileRegex = /^(?:(?:\+|0{0,2})91(\s*[\-]\s*)?|[0]?)?[6789]\d{9}$/;
-      if (!mobileNumber.trim()) {
-        errs.mobileNumber = 'Mobile number is required';
-      } else if (!mobileRegex.test(cleanedMobile)) {
-        errs.mobileNumber = 'Please enter a valid 10-digit Indian mobile number';
-      }
-    }
-
-    // Password validation (8 chars, upper, lower, number, special)
-    if (!password) {
-      errs.password = 'Password is required';
-    } else if (!isLogin) {
-      if (password.length < 8) {
-        errs.password = 'Password must be at least 8 characters long';
-      } else if (!/[A-Z]/.test(password)) {
-        errs.password = 'Must contain at least one uppercase letter (A-Z)';
-      } else if (!/[a-z]/.test(password)) {
-        errs.password = 'Must contain at least one lowercase letter (a-z)';
-      } else if (!/[0-9]/.test(password)) {
-        errs.password = 'Must contain at least one number (0-9)';
-      } else if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
-        errs.password = 'Must contain at least one special character (!@#$%...)';
-      }
-
-      if (password !== confirmPassword) {
-        errs.confirmPassword = 'Passwords do not match';
-      }
-    }
-
-    setErrors(errs);
-    return Object.keys(errs).length === 0;
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setAuthError('');
-
-    if (!validateForm()) return;
 
     setIsSubmitting(true);
     try {
-      if (isLogin) {
-        const res = await loginVillager(email, password);
-        if (res.success) {
-          onNavigate('villager_dashboard');
-        }
-      } else {
-        const res = await registerVillager({
-          fullName,
-          email,
-          mobileNumber,
-          password
-        });
-        if (res.success) {
-          onNavigate('villager_dashboard');
-        }
+      const res = await sendVillagerOtp(cleanMobile, fullName);
+      if (res.success) {
+        setStep(2);
+        setTimer(30);
+        setCanResend(false);
       }
     } catch (err) {
-      setAuthError(err.message || 'Authentication failed. Please check credentials.');
+      setError(err.message || 'Failed to send OTP to mobile. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDemoLogin = () => {
-    loginAsDemoVillager();
-    onNavigate('villager_dashboard');
+  // Resend OTP
+  const handleResendOtp = async () => {
+    if (!canResend) return;
+    setIsSubmitting(true);
+    setError('');
+    try {
+      const res = await sendVillagerOtp(mobileNumber, fullName);
+      if (res.success) {
+        setTimer(30);
+        setCanResend(false);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to resend OTP.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Step 2: Verify OTP
+  const handleVerifyOtp = async (e) => {
+    if (e) e.preventDefault();
+    setError('');
+
+    if (!otp.trim()) {
+      setError('Please enter the 6-digit OTP received on your mobile.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await verifyVillagerOtp(mobileNumber, otp, fullName);
+      if (res.success) {
+        onNavigate('villager_dashboard');
+      }
+    } catch (err) {
+      setError(err.message || 'OTP verification failed. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="max-w-xl mx-auto px-4 py-8 sm:py-12 animate-fade-in">
+    <div className="max-w-xl mx-auto px-4 py-8 sm:py-14 animate-fade-in text-left">
       <div className="bg-white rounded-3xl shadow-xl border border-slate-200/80 p-6 sm:p-10">
         {/* Header */}
         <div className="text-center mb-8">
           <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto mb-3 shadow-inner">
-            <Shield className="w-7 h-7" />
+            <Smartphone className="w-7 h-7" />
           </div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900">
-            {isLogin ? 'Villager Sign In' : 'Villager Registration'}
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full">
+            CITIZEN ACCESS DESK
+          </span>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-2">
+            Villager Sign In
           </h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            {isLogin
-              ? 'Access your citizen dashboard and track reported complaints'
-              : 'Register to report village issues directly to the Gram Panchayat'}
+          <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-sm mx-auto">
+            {step === 1
+              ? 'First enter your full name, then your mobile number to receive your verification OTP.'
+              : `Enter the 6-digit verification code sent to +91 ${mobileNumber} for ${fullName}`}
           </p>
-
-          {/* Quick Demo Fill Button */}
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={handleDemoLogin}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 transition shadow-xs"
-            >
-              <UserCheck className="w-4 h-4 text-emerald-600" />
-              <span>Instant Demo Login (Rameshwar Patel)</span>
-            </button>
-          </div>
         </div>
 
         {/* Global Error Banner */}
-        {authError && (
+        {error && (
           <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 flex items-center gap-3 text-rose-700 text-xs animate-fade-in">
             <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{authError}</span>
+            <span className="font-semibold">{error}</span>
           </div>
         )}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4 text-left">
-          {!isLogin && (
+        {/* STEP 1: FIRST TAKE USER NAME, THEN MOBILE NUMBER */}
+        {step === 1 && (
+          <form onSubmit={handleSendOtp} className="space-y-5">
+            {/* 1. Full Name First */}
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1">
-                Full Name <span className="text-rose-500">*</span>
+                Full Name (Citizen Name) <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="e.g. Rameshwar Patel"
-                className={`w-full text-sm px-4 py-2.5 rounded-xl border ${
-                  errors.fullName ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300'
-                } focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 outline-none transition`}
-              />
-              {errors.fullName && (
-                <p className="text-[11px] text-rose-600 mt-1">{errors.fullName}</p>
-              )}
+              <div className="relative">
+                <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="e.g. Rameshwar Patel"
+                  autoFocus
+                  required
+                  className="w-full text-sm font-semibold pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 outline-none transition text-slate-800"
+                />
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Please enter your name as registered with the village or Panchayat.
+              </p>
             </div>
-          )}
 
-          <div>
-            <label className="text-xs font-bold text-slate-700 block mb-1">
-              Email Address <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="e.g. rameshwar@villager.in"
-              className={`w-full text-sm px-4 py-2.5 rounded-xl border ${
-                errors.email ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300'
-              } focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 outline-none transition`}
-            />
-            {errors.email && (
-              <p className="text-[11px] text-rose-600 mt-1">{errors.email}</p>
-            )}
-          </div>
-
-          {!isLogin && (
+            {/* 2. Mobile Number Second */}
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1">
                 Indian Mobile Number <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-semibold">
-                  +91
+                <span className="absolute left-3.5 top-2.5 text-xs text-slate-500 font-bold">
+                  🇮🇳 +91
                 </span>
                 <input
                   type="tel"
@@ -200,119 +188,154 @@ export default function VillagerAuthPage({ onNavigate }) {
                   value={mobileNumber}
                   onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, ''))}
                   placeholder="9876543210"
-                  className={`w-full text-sm pl-11 pr-4 py-2.5 rounded-xl border ${
-                    errors.mobileNumber ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300'
-                  } focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 outline-none transition font-mono`}
+                  required
+                  className="w-full text-base font-mono font-bold pl-16 pr-4 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 outline-none transition tracking-wider"
                 />
               </div>
-              {errors.mobileNumber && (
-                <p className="text-[11px] text-rose-600 mt-1">{errors.mobileNumber}</p>
-              )}
-            </div>
-          )}
-
-          <div>
-            <label className="text-xs font-bold text-slate-700 block mb-1">
-              Password <span className="text-rose-500">*</span>
-            </label>
-            <div className="relative">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className={`w-full text-sm px-4 py-2.5 pr-10 rounded-xl border ${
-                  errors.password ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300'
-                } focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 outline-none transition`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
-                tabIndex={-1}
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-            {errors.password && (
-              <p className="text-[11px] text-rose-600 mt-1 leading-tight">{errors.password}</p>
-            )}
-            {!isLogin && (
-              <p className="text-[10px] text-slate-400 mt-1">
-                Minimum 8 characters with uppercase, lowercase, number, and special character.
+              <p className="text-[11px] text-slate-400 mt-1">
+                The verification OTP will be dispatched to this mobile number.
               </p>
-            )}
-          </div>
+            </div>
 
-          {!isLogin && (
+            <button
+              type="submit"
+              disabled={isSubmitting || !fullName.trim() || mobileNumber.length !== 10}
+              className="w-full py-3.5 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md shadow-emerald-700/20 transition flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
+            >
+              {isSubmitting ? (
+                <span>Dispatching OTP...</span>
+              ) : (
+                <>
+                  <span>Send OTP to Mobile Number</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
+
+            {/* Citizen Portal Trust Badge */}
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-center gap-2 text-slate-400 text-xs text-center">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Official Gram Panchayat Citizen Portal • Secure Mobile Verification</span>
+            </div>
+          </form>
+        )}
+
+        {/* STEP 2: VERIFY OTP SENT TO USER'S MOBILE NUMBER */}
+        {step === 2 && (
+          <form onSubmit={handleVerifyOtp} className="space-y-5 animate-fade-in">
+            {/* Real SMS Verification Notice - OTP is sent to user's mobile */}
+            <div className="p-4 bg-emerald-50/90 border border-emerald-200 rounded-2xl text-emerald-950 flex items-start gap-3 shadow-xs">
+              <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5 shadow-inner">
+                <Smartphone className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 block">
+                  SMS Verification Code Sent
+                </span>
+                <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                  A 6-digit OTP has been sent via SMS to{' '}
+                  <strong className="font-bold text-slate-800">+91 {mobileNumber}</strong> for{' '}
+                  <strong className="font-bold text-slate-800">{fullName}</strong>. Please enter the OTP received on your mobile phone below.
+                </p>
+              </div>
+            </div>
+
             <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">
-                Confirm Password <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-                className={`w-full text-sm px-4 py-2.5 rounded-xl border ${
-                  errors.confirmPassword ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300'
-                } focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 outline-none transition`}
-              />
-              {errors.confirmPassword && (
-                <p className="text-[11px] text-rose-600 mt-1">{errors.confirmPassword}</p>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-bold text-slate-700">
+                  Enter 6-Digit Verification Code:
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStep(1);
+                    setOtp('');
+                    setError('');
+                  }}
+                  className="text-[11px] text-emerald-700 hover:underline font-semibold"
+                >
+                  Change Name / Mobile
+                </button>
+              </div>
+
+              <div className="relative">
+                <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                  placeholder="• • • • • •"
+                  autoFocus
+                  required
+                  className="w-full text-center text-xl font-mono font-extrabold tracking-[0.5em] pl-10 pr-4 py-3 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 outline-none transition"
+                />
+              </div>
+            </div>
+
+            {/* Resend Timer & Button */}
+            <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+              <span>Didn't receive the SMS on +91 {mobileNumber}?</span>
+              {canResend ? (
+                <button
+                  type="button"
+                  onClick={handleResendOtp}
+                  disabled={isSubmitting}
+                  className="font-bold text-emerald-700 hover:underline flex items-center gap-1"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Resend OTP</span>
+                </button>
+              ) : (
+                <span className="text-slate-400 font-medium">
+                  Resend available in <strong className="font-mono text-slate-600">{timer}s</strong>
+                </span>
               )}
             </div>
-          )}
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full py-3.5 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md shadow-emerald-700/20 transition flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
-          >
-            {isSubmitting ? (
-              <span>Authenticating...</span>
-            ) : (
-              <>
-                <span>{isLogin ? 'Sign In to Dashboard' : 'Register Account'}</span>
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
-          </button>
-        </form>
-
-        {/* Toggle between Login and Register */}
-        <div className="mt-6 pt-6 border-t border-slate-100 text-center text-xs text-slate-500">
-          {isLogin ? (
-            <p>
-              Don't have a villager account yet?{' '}
+            <div className="flex gap-3 pt-2">
               <button
                 type="button"
                 onClick={() => {
-                  setIsLogin(false);
-                  setErrors({});
-                  setAuthError('');
+                  setStep(1);
+                  setOtp('');
+                  setError('');
                 }}
-                className="font-bold text-emerald-700 hover:underline"
+                className="py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition flex items-center gap-1.5"
               >
-                Register here
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back</span>
               </button>
-            </p>
-          ) : (
-            <p>
-              Already registered?{' '}
+
               <button
-                type="button"
-                onClick={() => {
-                  setIsLogin(true);
-                  setErrors({});
-                  setAuthError('');
-                }}
-                className="font-bold text-emerald-700 hover:underline"
+                type="submit"
+                disabled={isSubmitting || otp.length < 4}
+                className="flex-1 py-3.5 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md shadow-emerald-700/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                Log in here
+                {isSubmitting ? (
+                  <span>Verifying...</span>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Verify OTP & Open Dashboard</span>
+                  </>
+                )}
               </button>
-            </p>
-          )}
+            </div>
+          </form>
+        )}
+
+        {/* Footer Guidance */}
+        <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+          <p className="text-xs text-slate-400">
+            Are you a Gram Panchayat Official?{' '}
+            <button
+              onClick={() => onNavigate('panchayat_login')}
+              className="text-slate-700 font-bold hover:underline"
+            >
+              Sign in via Official Portal
+            </button>
+          </p>
         </div>
       </div>
     </div>

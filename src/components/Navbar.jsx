@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 
 export default function Navbar({ onNavigate, currentPage, onOpenTracker, onSelectComplaint }) {
-  const { currentUser, isVillager, isPanchayat, logout, loginAsDemoVillager, loginAsDemoPanchayat } = useAuth();
+  const { currentUser, isVillager, isPanchayat, logout } = useAuth();
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
@@ -108,29 +108,6 @@ export default function Navbar({ onNavigate, currentPage, onOpenTracker, onSelec
 
           {/* Right Action Icons & User Profile */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Quick Demo Switchers (Always accessible for easy testing) */}
-            <div className="hidden xl:flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
-              <span className="text-[10px] text-slate-400 px-1 font-bold">DEMO:</span>
-              <button
-                onClick={loginAsDemoVillager}
-                className={`px-2 py-1 rounded-lg transition ${
-                  isVillager ? 'bg-white text-emerald-700 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
-                }`}
-                title="Switch to Villager Demo Account"
-              >
-                Villager
-              </button>
-              <button
-                onClick={loginAsDemoPanchayat}
-                className={`px-2 py-1 rounded-lg transition ${
-                  isPanchayat ? 'bg-white text-blue-700 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
-                }`}
-                title="Switch to Panchayat Official Account"
-              >
-                Panchayat
-              </button>
-            </div>
-
             {/* Notification Bell */}
             {currentUser && (
               <NotificationDropdown onSelectComplaint={onSelectComplaint} />
