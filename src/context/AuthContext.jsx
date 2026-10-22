@@ -16,7 +16,7 @@ const KNOWN_VILLAGERS = [
     email: "rameshwar@villager.in",
     mobile_number: "9876543210",
     role: "villager",
-    village_name: "Rampur Gram Panchayat",
+    village_name: "Kandavara Gram Panchayat",
     ward_number: "Ward 3"
   },
   {
@@ -25,7 +25,7 @@ const KNOWN_VILLAGERS = [
     email: "sunita@villager.in",
     mobile_number: "9812345678",
     role: "villager",
-    village_name: "Rampur Gram Panchayat",
+    village_name: "Kandavara Gram Panchayat",
     ward_number: "Ward 1"
   },
   {
@@ -34,7 +34,7 @@ const KNOWN_VILLAGERS = [
     email: "anil@villager.in",
     mobile_number: "9823456789",
     role: "villager",
-    village_name: "Rampur Gram Panchayat",
+    village_name: "Kandavara Gram Panchayat",
     ward_number: "Ward 2"
   }
 ];
@@ -53,7 +53,7 @@ const DEMO_OFFICIAL = {
   mobile_number: "9811122233",
   role: "panchayat_official",
   designation: "Panchayat Secretary",
-  panchayat_name: "Rampur Gram Panchayat (Wards 1-12)",
+  panchayat_name: "Kandavara Gram Panchayat (Wards 1-12)",
   district: "Varanasi",
   state: "Uttar Pradesh"
 };
@@ -61,7 +61,20 @@ const DEMO_OFFICIAL = {
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('mv_auth_user');
-    return saved ? JSON.parse(saved) : null;
+    if (!saved) return null;
+    try {
+      const parsed = JSON.parse(saved);
+      if (parsed.village_name && parsed.village_name.includes('Rampur')) {
+        parsed.village_name = parsed.village_name.replace(/Rampur/g, 'Kandavara');
+      }
+      if (parsed.panchayat_name && parsed.panchayat_name.includes('Rampur')) {
+        parsed.panchayat_name = parsed.panchayat_name.replace(/Rampur/g, 'Kandavara');
+      }
+      localStorage.setItem('mv_auth_user', JSON.stringify(parsed));
+      return parsed;
+    } catch {
+      return null;
+    }
   });
 
   const [loading, setLoading] = useState(false);
@@ -141,7 +154,7 @@ export function AuthProvider({ children }) {
         email: `${cleanMobile}@villager.in`,
         mobile_number: cleanMobile,
         role: "villager",
-        village_name: "Rampur Gram Panchayat",
+        village_name: "Kandavara Gram Panchayat",
         ward_number: "Ward 1"
       };
 
@@ -184,7 +197,7 @@ export function AuthProvider({ children }) {
         email,
         mobile_number: "9876543210",
         role: "villager",
-        village_name: "Rampur Gram Panchayat"
+        village_name: "Kandavara Gram Panchayat"
       };
       setCurrentUser(guest);
       return { success: true, user: guest };

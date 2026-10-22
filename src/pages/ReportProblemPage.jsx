@@ -3,6 +3,14 @@ import { useAuth } from '../context/AuthContext';
 import { useComplaints } from '../context/ComplaintContext';
 import { COMPLAINT_CATEGORIES } from '../types';
 import { classifyComplaintPriority } from '../services/aiClassifier';
+import { getLiveGeolocation, reverseGeocodeLocation, getGoogleMapsUrl, getGoogleMapsEmbedUrl } from '../services/mapsService';
+import { verifyComplaintImage, compressImageToDataUrl } from '../services/aiImageValidator';
+import {
+  validateProblemReport,
+  SUBMISSION_THRESHOLD,
+  ACCEPTED_MESSAGE,
+  REJECTED_MESSAGE
+} from '../services/aiProblemValidator';
 import PriorityBadge from '../components/PriorityBadge';
 import {
   Camera,
@@ -28,7 +36,15 @@ import {
   Sun,
   Trees,
   Dog,
-  HelpCircle
+  HelpCircle,
+  ExternalLink,
+  ShieldCheck,
+  ShieldAlert,
+  Loader2,
+  Code,
+  ChevronDown,
+  ChevronUp,
+  Tag
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -61,16 +77,21 @@ export default function ReportProblemPage({ onNavigate, onSelectComplaint }) {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [villageName, setVillageName] = useState(currentUser?.village_name || 'Rampur Gram Panchayat');
+  const [villageName, setVillageName] = useState(currentUser?.village_name || 'Kandavara Gram Panchayat');
 
   // Geolocation
   const [location, setLocation] = useState(null);
   const [locationError, setLocationError] = useState('');
   const [isLocating, setIsLocating] = useState(false);
 
-  // AI Classification Result
+  // AI Classification & Image Verification Result
   const [aiClassification, setAiClassification] = useState(null);
   const [isClassifying, setIsClassifying] = useState(false);
+  const [imageValidation, setImageValidation] = useState(null);
+  const [isVerifyingImage, setIsVerifyingImage] = useState(false);
+  const [validationError, setValidationError] = useState('');
+  const [showValidationJson, setShowValidationJson] = useState(false);
+  const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
 
   // Final Contact Confirmation
   const [confirmName, setConfirmName] = useState(currentUser?.full_name || '');
@@ -83,73 +104,116 @@ export default function ReportProblemPage({ onNavigate, onSelectComplaint }) {
 
   const fileInputRef = useRef(null);
 
-  // Step 1: Photo Handling
-  const handlePhotoUpload = (e) => {
+  // Step 1: Photo Handling with HTML5 Canvas Compression (Guarantees Permanent Storage)
+  const handlePhotoUpload = async (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      setPhotoFile(file);
-      const preview = URL.createObjectURL(file);
-      setPhotoUrl(preview);
+      setIsCompressingPhoto(true);
+      setValidationError('');
+      setImageValidation(null);
+      try {
+        setPhotoFile(file);
+        // Compress and convert to permanent base64 Data URL so the image never disappears on logout or refresh
+        const permanentDataUrl = await compressImageToDataUrl(file, 1024, 1024, 0.85);
+        setPhotoUrl(permanentDataUrl);
+      } catch (err) {
+        console.warn('Canvas compression failed, falling back to FileReader:', err);
+        const reader = new FileReader();
+        reader.onload = () => setPhotoUrl(reader.result);
+        reader.readAsDataURL(file);
+      } finally {
+        setIsCompressingPhoto(false);
+      }
     }
   };
 
   const removePhoto = () => {
     setPhotoUrl(null);
     setPhotoFile(null);
+    setImageValidation(null);
+    setValidationError('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // Step 1: Geolocation
-  const handleGetLocation = () => {
+  // Step 1: Live Geolocation & Google Maps Reverse Geocoding
+  const handleGetLocation = async () => {
     setIsLocating(true);
     setLocationError('');
 
-    if (!navigator.geolocation) {
-      setLocationError('Geolocation is not supported by your browser.');
-      setIsLocating(false);
-      return;
-    }
+    try {
+      const geo = await getLiveGeolocation();
+      // Reverse geocode via Google Maps API (with free open fallback)
+      const geocode = await reverseGeocodeLocation(geo.latitude, geo.longitude);
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        setLocation({
-          latitude,
-          longitude,
-          address: `Ward 3, Rampur (Lat: ${latitude.toFixed(4)}, Long: ${longitude.toFixed(4)})`
-        });
-        setIsLocating(false);
-      },
-      (error) => {
-        setIsLocating(false);
-        if (error.code === error.PERMISSION_DENIED) {
-          setLocationError('Location permission denied. You can still submit the complaint by describing the landmark.');
-        } else {
-          setLocationError('Unable to retrieve location. Please specify the location in the description.');
-        }
-      },
-      { timeout: 10000, enableHighAccuracy: true }
-    );
+      setLocation({
+        latitude: geo.latitude,
+        longitude: geo.longitude,
+        accuracy: geo.accuracy,
+        address: geocode.formattedAddress,
+        source: geocode.source,
+        googleMapsUrl: getGoogleMapsUrl(geo.latitude, geo.longitude),
+        embedUrl: getGoogleMapsEmbedUrl(geo.latitude, geo.longitude)
+      });
+    } catch (err) {
+      setLocationError(err.message || 'Unable to retrieve location coordinates.');
+    } finally {
+      setIsLocating(false);
+    }
   };
 
-  // Move to Step 4 & Run AI Triage
+  // Move to Step 4 & Run AI Problem Validation System + Priority Triage
   const handleProceedToReview = async () => {
     if (!title.trim() || !description.trim()) {
       alert('Please fill in both the problem title and description before reviewing.');
       return;
     }
 
-    setIsClassifying(true);
-    setCurrentStep(4);
+    if (!photoUrl) {
+      alert('Civic verification requires photographic evidence. Please take or upload a photo in Step 1.');
+      setCurrentStep(1);
+      return;
+    }
+
+    setIsVerifyingImage(true);
+    setValidationError('');
 
     try {
+      // 1. AI-Based Problem Validation System:
+      // Analyzes the uploaded photograph, extracts keywords/objects/conditions,
+      // and calculates semantic similarity against Problem Title & Description.
+      const validation = await validateProblemReport({
+        imageBase64: photoUrl,
+        category: selectedCategory?.name || 'Other',
+        title,
+        description
+      });
+
+      setImageValidation(validation);
+
+      // STRICT SUBMISSION RULE:
+      // Submit the problem report only if image content is meaningfully related
+      // to both Problem Title and Problem Description. Similarity score must be >= 70%.
+      if (validation.status === 'rejected' || validation.similarity_score < SUBMISSION_THRESHOLD) {
+        setValidationError(validation.message || REJECTED_MESSAGE);
+        setIsVerifyingImage(false);
+        return; // HALT! Do not submit or proceed! Display rejection error.
+      }
+
+      // 2. If valid (accepted, similarity >= 70%):
+      setIsClassifying(true);
+      setCurrentStep(4);
+
       const result = await classifyComplaintPriority({
         category: selectedCategory?.name || 'Other',
         title,
         description
       });
       setAiClassification(result);
+    } catch (err) {
+      console.warn('AI validation check error:', err);
+      setValidationError('AI problem validation failed to complete. Please retry.');
     } finally {
+      setIsVerifyingImage(false);
       setIsClassifying(false);
     }
   };
@@ -171,6 +235,14 @@ export default function ReportProblemPage({ onNavigate, onSelectComplaint }) {
       return;
     }
 
+    // STRICT CHECK: Double-verify that the problem report is accepted before saving
+    if (!imageValidation || imageValidation.status !== 'accepted' || imageValidation.similarity_score < SUBMISSION_THRESHOLD) {
+      setContactError(REJECTED_MESSAGE);
+      setValidationError(REJECTED_MESSAGE);
+      setCurrentStep(3);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const newRecord = await submitComplaint({
@@ -181,12 +253,17 @@ export default function ReportProblemPage({ onNavigate, onSelectComplaint }) {
         latitude: location?.latitude || null,
         longitude: location?.longitude || null,
         location_address: location?.address || villageName,
-        village_name: villageName || 'Rampur Gram Panchayat',
+        village_name: villageName || 'Kandavara Gram Panchayat',
         reporter_name_snapshot: confirmName,
         reporter_mobile_snapshot: confirmMobile,
-        priority: aiClassification?.priority || 'HIGH',
+        priority: aiClassification?.priority || 'MEDIUM',
         priority_reason: aiClassification?.reason || 'Standard community triage priority.',
-        priority_source: aiClassification?.source || 'Contextual Rules'
+        priority_source: aiClassification?.source || 'Contextual Rules',
+        google_maps_url: location?.googleMapsUrl || (location?.latitude ? getGoogleMapsUrl(location.latitude, location.longitude) : null),
+        ai_validation_status: imageValidation.status,
+        similarity_score: imageValidation.similarity_score,
+        extracted_keywords: imageValidation.extracted_keywords,
+        ai_validation_message: imageValidation.message
       });
 
       setSubmittedComplaint(newRecord);
@@ -240,10 +317,10 @@ export default function ReportProblemPage({ onNavigate, onSelectComplaint }) {
                 COMPLAINT LODGED
               </span>
               <h3 className="text-2xl font-extrabold text-slate-900">
-                Complaint Submitted Successfully!
+                Problem report submitted successfully.
               </h3>
               <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                Your complaint has been recorded and sent to the Rampur Gram Panchayat dashboard.
+                Your photograph and complaint details were verified by AI and recorded on the Gram Panchayat ledger.
               </p>
             </div>
 
@@ -255,13 +332,34 @@ export default function ReportProblemPage({ onNavigate, onSelectComplaint }) {
                 </span>
               </div>
               <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400 font-semibold">AI Assigned Priority:</span>
+                <span className="text-slate-400 font-semibold">AI Problem Validation:</span>
+                <span className="font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[11px]">
+                  Accepted ({submittedComplaint.similarity_score || imageValidation?.similarity_score || 85}% Match)
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400 font-semibold">AI Priority:</span>
                 <PriorityBadge priority={submittedComplaint.priority} />
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-400 font-semibold">Status:</span>
                 <span className="font-semibold text-slate-800">Pending Panchayat Review</span>
               </div>
+
+              {submittedComplaint.extracted_keywords && submittedComplaint.extracted_keywords.length > 0 && (
+                <div className="pt-2 border-t border-slate-200 text-left">
+                  <span className="text-[10px] font-bold text-slate-400 block mb-1">
+                    Verified Visual Keywords from Photograph:
+                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {submittedComplaint.extracted_keywords.map((kw, i) => (
+                      <span key={i} className="px-2 py-0.5 bg-slate-200/80 text-slate-700 rounded-md text-[10px] font-medium">
+                        {kw}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <p className="text-[11px] text-slate-400">
@@ -362,15 +460,15 @@ export default function ReportProblemPage({ onNavigate, onSelectComplaint }) {
             />
           </div>
 
-          {/* Geolocation Section */}
+          {/* Geolocation Section with Google Maps Integration */}
           <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-emerald-600" />
                 <div>
-                  <h4 className="font-bold text-slate-800 text-sm">GPS Geolocation</h4>
+                  <h4 className="font-bold text-slate-800 text-sm">Live Location (Google Maps)</h4>
                   <p className="text-[11px] text-slate-500">
-                    Tag the exact latitude and longitude coordinates of the issue.
+                    Capture your live approximate or exact GPS coordinates and landmark address.
                   </p>
                 </div>
               </div>
@@ -382,24 +480,59 @@ export default function ReportProblemPage({ onNavigate, onSelectComplaint }) {
                 className="px-4 py-2 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 disabled:opacity-50"
               >
                 <Navigation className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin' : ''}`} />
-                <span>{isLocating ? 'Locating...' : 'Get My Location'}</span>
+                <span>{isLocating ? 'Detecting Live GPS...' : 'Detect Live Location'}</span>
               </button>
             </div>
 
             {location && (
-              <div className="bg-emerald-50/80 border border-emerald-200 p-3 rounded-xl flex items-center justify-between text-xs text-emerald-900 animate-fade-in">
-                <div>
-                  <strong>Location Captured:</strong> {location.address}
+              <div className="space-y-2.5 animate-fade-in">
+                <div className="bg-emerald-50/80 border border-emerald-200 p-3.5 rounded-xl flex items-center justify-between flex-wrap gap-2 text-xs text-emerald-900">
+                  <div className="space-y-0.5">
+                    <div>
+                      <strong className="text-emerald-950">Live Address:</strong> {location.address}
+                    </div>
+                    {location.accuracy && (
+                      <div className="text-[11px] text-emerald-700 font-medium">
+                        Accuracy: <span className="font-mono font-bold">±{location.accuracy}m</span> (High Precision Live GPS)
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] bg-emerald-200/90 text-emerald-800 px-2.5 py-1 rounded-full font-extrabold flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Live GPS Tagged
+                    </span>
+                    {location.googleMapsUrl && (
+                      <a
+                        href={location.googleMapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-white px-2.5 py-1 rounded-lg border border-blue-200 hover:bg-blue-50 transition"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        <span>Google Maps</span>
+                      </a>
+                    )}
+                  </div>
                 </div>
-                <span className="text-[10px] bg-emerald-200/80 px-2 py-0.5 rounded-full font-bold">
-                  ✓ Verified
-                </span>
+
+                {/* Interactive Map Preview */}
+                {location.embedUrl && (
+                  <div className="rounded-2xl overflow-hidden border border-slate-200 aspect-21/9 max-h-48 w-full shadow-inner bg-slate-100">
+                    <iframe
+                      title="Google Maps Live Location Pin"
+                      src={location.embedUrl}
+                      className="w-full h-full border-0"
+                      loading="lazy"
+                    />
+                  </div>
+                )}
               </div>
             )}
 
             {locationError && (
-              <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-xs text-amber-800">
-                {locationError}
+              <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-xs text-amber-800 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                <span>{locationError}</span>
               </div>
             )}
           </div>
@@ -439,8 +572,8 @@ export default function ReportProblemPage({ onNavigate, onSelectComplaint }) {
                   key={cat.id}
                   onClick={() => setSelectedCategory(cat)}
                   className={`p-4 rounded-2xl border-2 cursor-pointer transition flex items-start gap-3.5 ${isSelected
-                      ? 'border-emerald-600 bg-emerald-50/50 shadow-md ring-2 ring-emerald-100'
-                      : 'border-slate-200/80 bg-white hover:border-slate-300'
+                    ? 'border-emerald-600 bg-emerald-50/50 shadow-md ring-2 ring-emerald-100'
+                    : 'border-slate-200/80 bg-white hover:border-slate-300'
                     }`}
                 >
                   <div
@@ -560,6 +693,113 @@ export default function ReportProblemPage({ onNavigate, onSelectComplaint }) {
                 Change Photo/Location
               </button>
             </div>
+
+            {/* AI Vision Cross-Verification Scanner Bar */}
+            {isVerifyingImage && (
+              <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center gap-3 animate-pulse text-emerald-900 text-xs font-semibold shadow-xs">
+                <Loader2 className="w-5 h-5 animate-spin text-emerald-600 shrink-0" />
+                <div>
+                  <p className="font-extrabold text-slate-900">Multimodal AI Vision Cross-Checking Photograph...</p>
+                  <p className="text-[11px] text-emerald-700 mt-0.5">
+                    Analyzing photo evidence against category "{selectedCategory?.name || 'Selected'}" and title "{title}".
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* AI Image Verification Mismatch Error Banner (STRICTLY BLOCKS SUBMISSION) */}
+            {validationError && (
+              <div className="p-6 bg-rose-50 border-2 border-rose-300 rounded-2xl space-y-4 text-rose-900 animate-fade-in shadow-md">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <ShieldAlert className="w-6 h-6 text-rose-600 shrink-0" />
+                    <div>
+                      <h4 className="font-extrabold text-sm text-rose-900">
+                        AI Problem Validation Failed: Mismatch Detected
+                      </h4>
+                      <span className="text-[10px] uppercase tracking-wider font-bold text-rose-600">
+                        Status: rejected • Similarity: {imageValidation?.similarity_score ?? 0}% (Required: ≥ 70%)
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-xs font-mono font-bold bg-rose-200 text-rose-900 px-2.5 py-1 rounded-full">
+                    Score: {imageValidation?.similarity_score ?? 0}% &lt; 70%
+                  </span>
+                </div>
+
+                <div className="bg-white/90 p-4 rounded-xl border border-rose-200 text-xs text-rose-800 space-y-2">
+                  <p className="font-semibold text-rose-950 leading-relaxed">
+                    {validationError}
+                  </p>
+
+                  {imageValidation?.extracted_keywords && imageValidation.extracted_keywords.length > 0 && (
+                    <div className="pt-2 border-t border-rose-100">
+                      <span className="text-[11px] font-bold text-slate-700 block mb-1.5 flex items-center gap-1">
+                        <Tag className="w-3 h-3 text-rose-500" />
+                        <span>Extracted Keywords from Photograph:</span>
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {imageValidation.extracted_keywords.map((kw, i) => (
+                          <span
+                            key={i}
+                            className="px-2 py-0.5 bg-rose-100 text-rose-800 text-[11px] font-medium rounded-md border border-rose-200"
+                          >
+                            {kw}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-2">
+                        These visual elements do not sufficiently match your problem title: <em>"{title}"</em>.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Collapsible Raw JSON Response Inspector */}
+                {imageValidation && (
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowValidationJson(!showValidationJson)}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-800 hover:text-rose-950 transition"
+                    >
+                      <Code className="w-3.5 h-3.5" />
+                      <span>{showValidationJson ? 'Hide AI Validation JSON' : 'View AI Validation JSON Schema'}</span>
+                      {showValidationJson ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    </button>
+
+                    {showValidationJson && (
+                      <pre className="mt-2 p-3 bg-slate-900 text-emerald-400 rounded-xl text-[11px] font-mono overflow-x-auto shadow-inner border border-slate-800">
+                        {JSON.stringify(
+                          {
+                            status: imageValidation.status || 'rejected',
+                            extracted_keywords: imageValidation.extracted_keywords || [],
+                            similarity_score: imageValidation.similarity_score ?? 0,
+                            message: imageValidation.message || validationError
+                          },
+                          null,
+                          2
+                        )}
+                      </pre>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-rose-200/80">
+                  <p className="text-[11px] text-rose-700 italic">
+                    The report cannot be submitted with an unrelated photograph. Please upload relevant photo evidence.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(1)}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>Change Photograph in Step 1</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-between pt-4 border-t border-slate-100">
@@ -573,10 +813,20 @@ export default function ReportProblemPage({ onNavigate, onSelectComplaint }) {
             <button
               type="button"
               onClick={handleProceedToReview}
-              className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md transition flex items-center gap-2"
+              disabled={isVerifyingImage}
+              className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md transition flex items-center gap-2 disabled:opacity-50"
             >
-              <span>Review Complaint & AI Priority</span>
-              <ArrowRight className="w-4 h-4" />
+              {isVerifyingImage ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Cross-Checking Photo...</span>
+                </>
+              ) : (
+                <>
+                  <span>Verify Photo & Review AI Priority</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -613,7 +863,7 @@ export default function ReportProblemPage({ onNavigate, onSelectComplaint }) {
                     Analyzing safety threats...
                   </span>
                 ) : (
-                  <PriorityBadge priority={aiClassification?.priority || 'MEDIUM'} />
+                  <PriorityBadge priority={aiClassification?.priority || 'HIGH'} />
                 )}
               </div>
               <span className="text-[11px] text-slate-500 font-medium">
@@ -628,6 +878,79 @@ export default function ReportProblemPage({ onNavigate, onSelectComplaint }) {
               * Note: AI priority serves as a dispatch triage recommendation for Gram Panchayat officials.
             </p>
           </div>
+
+          {/* AI Problem Validation Certificate Card */}
+          {imageValidation && (
+            <div className="bg-emerald-50/90 border-2 border-emerald-300 rounded-2xl p-5 text-emerald-950 space-y-3 shadow-sm">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                  <span className="font-extrabold text-sm text-slate-900">
+                    AI Problem Validation: Accepted ✓
+                  </span>
+                  <span className="text-[10px] font-extrabold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full uppercase">
+                    Status: {imageValidation.status}
+                  </span>
+                </div>
+                <span className="text-xs font-extrabold bg-emerald-600 text-white px-3 py-1 rounded-full shadow-xs">
+                  Semantic Match: {imageValidation.similarity_score}% (≥ 70% Required)
+                </span>
+              </div>
+
+              <div className="text-xs text-slate-700 bg-white/80 p-3.5 rounded-xl border border-emerald-100 space-y-2">
+                <p className="font-semibold text-emerald-900">
+                  {imageValidation.message || ACCEPTED_MESSAGE}
+                </p>
+
+                {imageValidation.extracted_keywords && imageValidation.extracted_keywords.length > 0 && (
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-600 block mb-1.5 flex items-center gap-1">
+                      <Tag className="w-3 h-3 text-emerald-600" />
+                      <span>Extracted Visual Keywords:</span>
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {imageValidation.extracted_keywords.map((kw, i) => (
+                        <span
+                          key={i}
+                          className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[11px] font-medium rounded-md border border-emerald-200"
+                        >
+                          {kw}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* View Validation JSON toggle */}
+              <div className="pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => setShowValidationJson(!showValidationJson)}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 hover:text-emerald-950 transition"
+                >
+                  <Code className="w-3.5 h-3.5" />
+                  <span>{showValidationJson ? 'Hide AI Validation JSON' : 'View AI Validation JSON Schema'}</span>
+                  {showValidationJson ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+
+                {showValidationJson && (
+                  <pre className="mt-2 p-3 bg-slate-900 text-emerald-400 rounded-xl text-[11px] font-mono overflow-x-auto shadow-inner border border-slate-800">
+                    {JSON.stringify(
+                      {
+                        status: imageValidation.status || 'accepted',
+                        extracted_keywords: imageValidation.extracted_keywords || [],
+                        similarity_score: imageValidation.similarity_score ?? 85,
+                        message: imageValidation.message || ACCEPTED_MESSAGE
+                      },
+                      null,
+                      2
+                    )}
+                  </pre>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Summary Box */}
           <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 space-y-4">
@@ -645,7 +968,7 @@ export default function ReportProblemPage({ onNavigate, onSelectComplaint }) {
                   Gram Panchayat / Village
                 </span>
                 <span className="text-sm font-bold text-slate-800">
-                  {villageName || 'Rampur Gram Panchayat'}
+                  {villageName || 'Kandavara Gram Panchayat'}
                 </span>
               </div>
             </div>
@@ -670,10 +993,10 @@ export default function ReportProblemPage({ onNavigate, onSelectComplaint }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
               <div>
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide block mb-1">
-                  Evidence Photo
+                  Evidence Photo (Permanent Storage)
                 </span>
                 {photoUrl ? (
-                  <div className="aspect-video rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+                  <div className="aspect-video rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shadow-inner">
                     <img src={photoUrl} alt="Problem Preview" className="w-full h-full object-cover" />
                   </div>
                 ) : (
@@ -682,17 +1005,30 @@ export default function ReportProblemPage({ onNavigate, onSelectComplaint }) {
               </div>
               <div>
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide block mb-1">
-                  Tagged Location
+                  Live GPS Location (Google Maps)
                 </span>
-                <div className="bg-white p-3 rounded-xl border border-slate-200 text-xs text-slate-600">
-                  <div className="flex items-center gap-1.5 font-semibold text-slate-800 mb-1">
+                <div className="bg-white p-3 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-1.5">
+                  <div className="flex items-center gap-1.5 font-semibold text-slate-800">
                     <MapPin className="w-3.5 h-3.5 text-emerald-600" />
                     <span>{location ? location.address : 'Described in text'}</span>
                   </div>
                   {location?.latitude && (
-                    <span className="text-[10px] text-slate-400 font-mono block">
-                      GPS: {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}
-                    </span>
+                    <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-slate-100">
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        GPS: {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)} {location.accuracy ? `(±${location.accuracy}m)` : ''}
+                      </span>
+                      {location.googleMapsUrl && (
+                        <a
+                          href={location.googleMapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 hover:text-blue-900 hover:underline"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>Google Maps</span>
+                        </a>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>

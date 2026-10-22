@@ -175,7 +175,7 @@ export default function PanchayatDashboard({ onNavigate, onSelectComplaint }) {
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800 text-emerald-400 text-xs font-bold mb-2">
             <Building2 className="w-3.5 h-3.5" />
-            <span>{currentUser?.panchayat_name || 'Rampur Gram Panchayat (Wards 1-12)'}</span>
+            <span>{currentUser?.panchayat_name || 'Kandavara Gram Panchayat (Wards 1-12)'}</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
             Panchayat Grievance Desk
@@ -403,6 +403,7 @@ export default function PanchayatDashboard({ onNavigate, onSelectComplaint }) {
                             <img
                               src={c.image_url}
                               alt={c.title}
+                              onError={(e) => { e.currentTarget.src = '/assets/hero-village.jpg'; }}
                               className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-200"
                             />
                             <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white">
@@ -446,10 +447,10 @@ export default function PanchayatDashboard({ onNavigate, onSelectComplaint }) {
                           <MapPin className="w-3.5 h-3.5 text-emerald-600 mt-0.5 shrink-0" />
                           <div className="min-w-0 max-w-[200px]">
                             <p className="text-xs font-bold text-slate-800 leading-snug line-clamp-2" title={c.location_address || c.village_name}>
-                              {c.location_address || c.village_name || 'Rampur Village'}
+                              {c.location_address || c.village_name || 'Kandavara Village'}
                             </p>
                             <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                              {c.village_name || 'Rampur Gram Panchayat'}
+                              {c.village_name || 'Kandavara Gram Panchayat'}
                             </p>
                             {c.latitude && c.longitude && (
                               <a

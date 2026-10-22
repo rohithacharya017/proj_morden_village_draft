@@ -97,7 +97,7 @@ The application includes built-in quick demo accounts accessible from the header
 
 | Role | Email | Password | Details |
 |---|---|---|---|
-| **Villager** | `rameshwar@villager.in` | `Villager@2026!` | Rameshwar Patel (Ward 3, Rampur) |
+| **Villager** | `rameshwar@villager.in` | `Villager@2026!` | Rameshwar Patel (Ward 3, Kandavara) |
 | **Panchayat Official** | `official@panchayat.gov.in` | `Panchayat@2026!` | Satish Sharma (Panchayat Secretary) |
 
 *You can also register a new villager account anytime or track any complaint number (e.g. `MV-2026-00001`) from the Quick Tracker on the landing page.*

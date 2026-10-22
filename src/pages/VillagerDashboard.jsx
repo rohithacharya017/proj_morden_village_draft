@@ -43,7 +43,7 @@ export default function VillagerDashboard({ onNavigate, onSelectComplaint }) {
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-800/60 text-emerald-200 text-xs font-semibold mb-3">
             <span>Citizen Dashboard</span>
             <span>•</span>
-            <span>{currentUser?.village_name || 'Rampur Gram Panchayat'}</span>
+            <span>{currentUser?.village_name || 'Kandavara Gram Panchayat'}</span>
           </div>
           <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight">
             Namaste, {currentUser?.full_name || 'Citizen'}! 🙏
@@ -193,11 +193,26 @@ export default function VillagerDashboard({ onNavigate, onSelectComplaint }) {
                 key={c.id}
                 className="p-5 sm:p-6 hover:bg-slate-50/70 transition flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
               >
-                <div className="space-y-1.5 max-w-2xl">
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md">
-                      {c.complaint_number}
-                    </span>
+                <div className="flex items-start gap-4 max-w-2xl">
+                  {c.image_url && (
+                    <div
+                      onClick={() => onSelectComplaint(c.id)}
+                      className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shrink-0 cursor-pointer shadow-xs hover:border-emerald-500 transition"
+                      title="View complaint details"
+                    >
+                      <img
+                        src={c.image_url}
+                        alt={c.title}
+                        onError={(e) => { e.currentTarget.src = '/assets/hero-village.jpg'; }}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md">
+                        {c.complaint_number}
+                      </span>
                     <PriorityBadge
                       priority={c.priority}
                       reason={c.priority_reason}
@@ -224,12 +239,13 @@ export default function VillagerDashboard({ onNavigate, onSelectComplaint }) {
                     </span>
                     <span className="flex items-center gap-1">
                       <MapPin className="w-3 h-3" />
-                      {c.location_address || c.village_name || 'Rampur'}
+                      {c.location_address || c.village_name || 'Kandavara'}
                     </span>
                   </div>
                 </div>
+              </div>
 
-                <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
+              <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
                   <button
                     onClick={() => onSelectComplaint(c.id)}
                     className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-700 font-bold text-xs transition flex items-center gap-1.5 shadow-xs"

@@ -77,9 +77,13 @@ export default function LandingPage({ onNavigate, onOpenTracker }) {
             {/* Right Media Banner */}
             <div className="lg:col-span-5 relative">
               <div className="relative rounded-3xl overflow-hidden shadow-2xl border border-slate-100 bg-gradient-to-tr from-emerald-900 to-slate-900 aspect-4/3 group">
-                <img
-                  src="/assets/hero-village.jpg"
-                  alt="Modern Village Civic Ecosystem"
+                <video
+                  src="/assets/hero-village.mp4"
+                  poster="/assets/hero-village.jpg"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-90"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent" />
@@ -88,7 +92,7 @@ export default function LandingPage({ onNavigate, onOpenTracker }) {
                     DIGITAL GRAM PANCHAYAT
                   </span>
                   <p className="font-extrabold text-base leading-snug">
-                    Rampur Smart Panchayat Model
+                    Kandavara Smart Panchayat Model
                   </p>
                   <p className="text-xs text-slate-300 mt-0.5">
                     100% Digital Grievance Redressal across all 12 Wards.

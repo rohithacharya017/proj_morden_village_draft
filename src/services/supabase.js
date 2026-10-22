@@ -32,7 +32,7 @@ const SEED_COMPLAINTS = [
     title: "High-voltage wire snapped near Primary School pathway",
     category: "Electrical Problems",
     description: "An overhead 440V wire snapped during yesterday's high winds and is hanging 4 feet above the pathway where children walk to the government school. Immediate hazard of electrocution.",
-    village_name: "Rampur Gram Panchayat",
+    village_name: "Kandavara Gram Panchayat",
     latitude: 25.3176,
     longitude: 82.9739,
     location_address: "Ward 3, East Approach Lane near Govt Primary School",
@@ -58,7 +58,7 @@ const SEED_COMPLAINTS = [
     title: "Main drinking water pipeline cracked with muddy ingress",
     category: "Water Supply",
     description: "The 3-inch distribution pipe near Community Well #2 has a major fracture. Turbid brown water is reaching 35 households, making drinking water unsafe.",
-    village_name: "Rampur Gram Panchayat",
+    village_name: "Kandavara Gram Panchayat",
     latitude: 25.3210,
     longitude: 82.9780,
     location_address: "Ward 1, Beside Community Well #2",
@@ -84,7 +84,7 @@ const SEED_COMPLAINTS = [
     title: "Streetlight luminaire dead at Market Crossing",
     category: "Streetlights and Public Lighting",
     description: "The solar streetlight pole at the four-way market intersection has not lit up for 4 nights. Dark road increases bicycle accident risk at night.",
-    village_name: "Rampur Gram Panchayat",
+    village_name: "Kandavara Gram Panchayat",
     latitude: 25.3195,
     longitude: 82.9712,
     location_address: "Ward 4, Weekly Haat Bazaar Intersection",
@@ -110,7 +110,7 @@ const SEED_COMPLAINTS = [
     title: "Overflowing compost bin near dairy shed",
     category: "Waste Management and Sanitation",
     description: "The community organic waste collection point is full and spilling onto the side drain. Bad odor and flies accumulating.",
-    village_name: "Rampur Gram Panchayat",
+    village_name: "Kandavara Gram Panchayat",
     latitude: 25.3150,
     longitude: 82.9690,
     location_address: "Ward 2, Dairy Cooperative Gate",
@@ -136,7 +136,7 @@ const SEED_COMPLAINTS = [
     title: "Community Park Bench wooden slat broken",
     category: "Parks and Public Spaces",
     description: "One wooden slat on the park bench near the herbal garden has cracked. Minor issue, needs replacement.",
-    village_name: "Rampur Gram Panchayat",
+    village_name: "Kandavara Gram Panchayat",
     latitude: 25.3188,
     longitude: 82.9755,
     location_address: "Ward 1, Amrit Sarovar Park",
@@ -178,11 +178,38 @@ const SEED_NOTIFICATIONS = [
   }
 ];
 
-// Initialize LocalStorage if empty
+// Initialize LocalStorage if empty or sanitize stale blob URLs
 function initLocalStorage() {
-  if (!localStorage.getItem('mv_complaints')) {
+  const existingComplaints = localStorage.getItem('mv_complaints');
+  if (!existingComplaints) {
     localStorage.setItem('mv_complaints', JSON.stringify(SEED_COMPLAINTS));
+  } else {
+    // Sanitize any dead blob URLs from prior sessions
+    try {
+      const parsed = JSON.parse(existingComplaints);
+      let modified = false;
+      parsed.forEach(c => {
+        if (c.image_url && c.image_url.startsWith('blob:')) {
+          c.image_url = '/assets/hero-village.jpg'; // graceful recovery fallback
+          modified = true;
+        }
+        if (c.village_name && c.village_name.includes('Rampur')) {
+          c.village_name = c.village_name.replace(/Rampur/g, 'Kandavara');
+          modified = true;
+        }
+        if (c.location_address && c.location_address.includes('Rampur')) {
+          c.location_address = c.location_address.replace(/Rampur/g, 'Kandavara');
+          modified = true;
+        }
+      });
+      if (modified) {
+        localStorage.setItem('mv_complaints', JSON.stringify(parsed));
+      }
+    } catch (e) {
+      console.warn('Failed to sanitize stale complaints:', e);
+    }
   }
+
   if (!localStorage.getItem('mv_notifications')) {
     localStorage.setItem('mv_notifications', JSON.stringify(SEED_NOTIFICATIONS));
   }

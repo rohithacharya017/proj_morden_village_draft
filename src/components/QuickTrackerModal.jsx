@@ -93,7 +93,7 @@ export default function QuickTrackerModal({ isOpen, onClose, onSelectComplaint }
 
               <div className="text-xs text-slate-600 border-t border-slate-200/80 pt-2 flex items-center justify-between">
                 <span>Reported: {new Date(result.created_at).toLocaleDateString()}</span>
-                <span>Ward: {result.village_name || 'Rampur'}</span>
+                <span>Ward: {result.village_name || 'Kandavara'}</span>
               </div>
 
               {result.completion_note && (

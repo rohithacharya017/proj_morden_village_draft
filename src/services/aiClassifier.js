@@ -3,6 +3,8 @@
 // Contextual Heuristics with Gemini AI API Integration & Rule-Based Fallback
 // ==========================================================================
 
+export { validateProblemReport } from './aiProblemValidator';
+
 /**
  * Classifies a civic complaint based on Category, Title, Description, and context.
  * Returns { priority: 'HIGH' | 'MEDIUM' | 'LOW', reason: string, source: string }
@@ -40,7 +42,7 @@ function evaluateRuleBasedPriority(category, text) {
   const highSafetyKeywords = [
     'exposed wire', 'open wire', 'sparking', 'electric shock', 'electrocution', 'fallen pole', 'live wire',
     'contaminated water', 'poison', 'foul smell', 'epidemic', 'fever outbreak', 'yellow water', 'stinking water',
-    'road collapsed', 'huge cave in', 'fatal', 'accident', 'deep trench', 'landslide',
+    'road collapsed', 'huge cave in', 'fatal', 'accident', 'deep trench', 'landslide', 'electric pole down',
     'open manhole', 'child fell', 'toxic sewage', 'overflowing sewage into homes',
     'roof collapsed', 'wall collapse', 'structural crack', 'building about to fall', 'broken glass',
     'rabid dog', 'snake bite', 'dangerous dog biting', 'dead animal'

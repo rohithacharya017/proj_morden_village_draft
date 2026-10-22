@@ -53,7 +53,7 @@ export function ComplaintProvider({ children }) {
       recipient_id: saved.reporter_id,
       complaint_id: saved.id,
       title: "Complaint Lodged Successfully",
-      message: `Your complaint ${saved.complaint_number} has been recorded and submitted to Rampur Gram Panchayat. Assigned Priority: ${saved.priority}.`,
+      message: `Your complaint ${saved.complaint_number} has been recorded and submitted to Kandavara Gram Panchayat. Assigned Priority: ${saved.priority}.`,
       notification_type: "status_update"
     });
 

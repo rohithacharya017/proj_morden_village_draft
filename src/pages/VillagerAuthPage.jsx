@@ -27,9 +27,21 @@ export default function VillagerAuthPage({ onNavigate }) {
   const [timer, setTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
 
+  // Real-Time Incoming SMS Notification State
+  const [realTimeSms, setRealTimeSms] = useState(null);
+
   // UI States
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Listen for real-time SMS dispatch events
+  useEffect(() => {
+    const handleSms = (e) => {
+      setRealTimeSms(e.detail);
+    };
+    window.addEventListener('mv_sms_received', handleSms);
+    return () => window.removeEventListener('mv_sms_received', handleSms);
+  }, []);
 
   // Timer countdown effect for OTP resend
   useEffect(() => {
@@ -139,6 +151,50 @@ export default function VillagerAuthPage({ onNavigate }) {
               : `Enter the 6-digit verification code sent to +91 ${mobileNumber} for ${fullName}`}
           </p>
         </div>
+
+        {/* Real-Time Mobile Phone SMS Notification Alert */}
+        {realTimeSms && (
+          <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-emerald-900 to-slate-900 text-white shadow-xl border border-emerald-500/40 animate-fade-in relative overflow-hidden">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center shrink-0 text-emerald-400">
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                      LIVE SMS DISPATCH
+                    </span>
+                    <span className="text-[10px] text-slate-400">{realTimeSms.timestamp}</span>
+                  </div>
+                  <h4 className="font-extrabold text-sm text-white mt-1">
+                    Incoming SMS from GOV-PANCHAYAT
+                  </h4>
+                  <p className="text-xs text-slate-300 mt-0.5 font-mono">
+                    OTP: <span className="text-base font-extrabold text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-400/40 tracking-widest">{realTimeSms.otp}</span>
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-1 italic">
+                    {realTimeSms.provider?.includes('Fast2SMS')
+                      ? '✓ Delivered to handset via Fast2SMS Indian Gateway'
+                      : 'Real-time SMS alert active for instant mobile verification.'}
+                  </p>
+                </div>
+              </div>
+
+              {step === 2 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOtp(realTimeSms.otp);
+                  }}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold rounded-xl transition shadow-md shrink-0 self-center"
+                >
+                  Auto-Fill OTP
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Global Error Banner */}
         {error && (

@@ -200,5 +200,5 @@ CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON public.notifications(r
 -- ==========================================================================
 INSERT INTO public.panchayat_offices (id, office_name, village_name, block, district, state, contact_phone, contact_email)
 VALUES 
-    ('11111111-1111-1111-1111-111111111111', 'Rampur Gram Panchayat Office', 'Rampur', 'Rampur Central', 'Varanasi', 'Uttar Pradesh', '+91 98765 43210', 'panchayat.rampur@gov.in')
+    ('11111111-1111-1111-1111-111111111111', 'Kandavara Gram Panchayat Office', 'Kandavara', 'Kandavara Central', 'Varanasi', 'Uttar Pradesh', '+91 98765 43210', 'panchayat.kandavara@gov.in')
 ON CONFLICT (id) DO NOTHING;
