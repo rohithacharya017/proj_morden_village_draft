@@ -184,7 +184,7 @@ export default function ReportProblemPage({ onNavigate, onSelectComplaint }) {
         village_name: villageName || 'Rampur Gram Panchayat',
         reporter_name_snapshot: confirmName,
         reporter_mobile_snapshot: confirmMobile,
-        priority: aiClassification?.priority || 'MEDIUM',
+        priority: aiClassification?.priority || 'HIGH',
         priority_reason: aiClassification?.reason || 'Standard community triage priority.',
         priority_source: aiClassification?.source || 'Contextual Rules'
       });
@@ -438,16 +438,14 @@ export default function ReportProblemPage({ onNavigate, onSelectComplaint }) {
                 <div
                   key={cat.id}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`p-4 rounded-2xl border-2 cursor-pointer transition flex items-start gap-3.5 ${
-                    isSelected
+                  className={`p-4 rounded-2xl border-2 cursor-pointer transition flex items-start gap-3.5 ${isSelected
                       ? 'border-emerald-600 bg-emerald-50/50 shadow-md ring-2 ring-emerald-100'
                       : 'border-slate-200/80 bg-white hover:border-slate-300'
-                  }`}
+                    }`}
                 >
                   <div
-                    className={`p-2.5 rounded-xl shrink-0 ${
-                      isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700'
-                    }`}
+                    className={`p-2.5 rounded-xl shrink-0 ${isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700'
+                      }`}
                   >
                     {getCategoryIcon(cat.iconName)}
                   </div>
